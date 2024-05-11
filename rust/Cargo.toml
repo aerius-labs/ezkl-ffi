@@ -10,8 +10,24 @@ crate-type = ["staticlib"]
 lto = false
 
 [dependencies]
-ezkl = { version = "10.4.2", git = "https://github.com/zkonduit/ezkl" }
+halo2_proofs = { git = "https://github.com/zkonduit/halo2", branch = "ac/optional-selector-poly" }
+halo2curves = { git = "https://github.com/privacy-scaling-explorations/halo2curves", rev = "9fff22c", features = [
+    "derive_serde",
+] }
+snark-verifier = { git = "https://github.com/zkonduit/snark-verifier", branch = "ac/chunked-mv-lookup", features = [
+    "derive_serde",
+] }
+ezkl = { tag = "v11.0.6", git = "https://github.com/zkonduit/ezkl" }
+serde_json = { version = "1.0.97", default_features = false, features = [
+    "float_roundtrip",
+    "raw_value",
+], optional = true }
+bincode = { version = "1.3.3", default_features = false }
 libc = "0.2.154"
+anyhow = "1.0.83"
 
 [build-dependencies]
 cbindgen = "= 0.26.0"
+
+[patch.'https://github.com/zkonduit/halo2']
+halo2_proofs = { git = "https://github.com/zkonduit/halo2?branch=ac/optional-selector-poly#54f54453cf186aa5d89579c4e7663f9a27cfb89a", package = "halo2_proofs", branch = "ac/optional-selector-poly" }
