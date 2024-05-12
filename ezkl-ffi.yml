@@ -1,0 +1,47 @@
+---
+GENERATOR:
+  PackageName: cgo
+  PackageDescription:
+  PackageLicense:
+  Options:
+    SafeStrings: true
+  Includes:
+    - ezkl-ffi.h
+  FlagGroups:
+    - {name: "LDFLAGS", flags: [
+      "-L${SRCDIR}",
+      "-lezkl_ffi",
+    ]}
+    - {name: "linux LDFLAGS", flags: [
+      "-lcrypto",
+      "-ldl",
+      "-lm",
+      "-lrt",
+      "-lssl",
+      "-ludev",
+    ]}
+    - {name: "darwin LDFLAGS", flags: [
+      "-F/Library/Frameworks",
+      "-framework Security",
+      "-framework CoreServices",
+      "-framework IOKit",
+      "-framework IOSurface",
+      "-framework AppKit",
+    ]}
+
+PARSER:
+  Defines:
+  IncludePaths:
+    - /usr/include
+  SourcesPaths:
+    - ./cgo/ezkl-ffi.h
+
+TRANSLATOR:
+  Rules:
+    function:
+      - {action: accept, from: "verify_proof"}
+    private:
+      - {transform: unexport}
+    post-global:
+      - {transform: export}
+      - {load: snakecase}

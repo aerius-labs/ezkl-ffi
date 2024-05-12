@@ -1,2 +1,11 @@
 .vscode
 .idea
+
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+**/.install-ezkl-ffi
+**/*.a
+**/*.h
