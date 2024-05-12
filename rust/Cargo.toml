@@ -21,7 +21,7 @@ ezkl = { tag = "v11.0.6", git = "https://github.com/zkonduit/ezkl" }
 serde_json = { version = "1.0.97", default_features = false, features = [
     "float_roundtrip",
     "raw_value",
-], optional = true }
+]}
 bincode = { version = "1.3.3", default_features = false }
 libc = "0.2.154"
 anyhow = "1.0.83"
