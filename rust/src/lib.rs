@@ -1,212 +1,34 @@
 extern crate libc;
 
-use ezkl::circuit::CheckMode;
-use ezkl::{Commitments, graph, pfsys};
-use ezkl::graph::{GraphCircuit, GraphSettings, GraphWitness};
-use ezkl::pfsys::{create_proof_circuit, TranscriptType, verify_proof_circuit};
-use ezkl::pfsys::evm::aggregation_kzg::PoseidonTranscript;
-use halo2_proofs::plonk::{ProvingKey, VerifyingKey};
+mod util;
 
-use halo2_proofs::plonk::*;
-use halo2_proofs::poly::commitment::{CommitmentScheme, ParamsProver};
-use halo2_proofs::poly::ipa::multiopen::{ProverIPA, VerifierIPA};
-use halo2_proofs::poly::ipa::{
-    commitment::{IPACommitmentScheme, ParamsIPA},
-    strategy::SingleStrategy as IPASingleStrategy,
-};
-use halo2_proofs::poly::kzg::multiopen::ProverSHPLONK;
-use halo2_proofs::poly::kzg::multiopen::VerifierSHPLONK;
-use halo2_proofs::poly::kzg::{
-    commitment::{KZGCommitmentScheme, ParamsKZG},
-    strategy::SingleStrategy as KZGSingleStrategy,
-};
-use halo2_proofs::poly::VerificationStrategy;
-use halo2curves::bn256::{Bn256, Fr, G1Affine};
-use halo2curves::ff::{FromUniformBytes, PrimeField};
+#[no_mangle]
+pub extern "C" fn verify(
+    proof_length: libc::size_t,
+    proof: *const u8,
+    vk_length: libc::size_t,
+    vk: *const u8,
+    settings_length: libc::size_t,
+    settings: *const u8,
+    srs_length: libc::size_t,
+    srs: *const u8,
+) -> libc::__u8 {
+    // convert all const u8 to Vec<u8>
+    let proof_slice =
+        unsafe { std::slice::from_raw_parts(proof as *const u8, proof_length) };
+    let proof_vec = proof_slice.to_vec();
 
-use snark_verifier::system::halo2::transcript::evm::EvmTranscript;
+    let vk_slice = unsafe { std::slice::from_raw_parts(vk as *const u8, vk_length) };
+    let vk_vec = vk_slice.to_vec();
 
-use bincode;
-use anyhow::{ Result, Error};
-use snark_verifier::loader::native::NativeLoader;
+    let settings_slice = unsafe { std::slice::from_raw_parts(settings as *const u8, settings_length) };
+    let settings_vec = settings_slice.to_vec();
 
-pub fn prove(
-    witness: Vec<u8>,
-    pk: Vec<u8>,
-    compiled_circuit: Vec<u8>,
-    srs: Vec<u8>,
-) -> Result<Vec<u8>> {
+    let srs_slice = unsafe { std::slice::from_raw_parts(srs as *const u8, srs_length) };
+    let srs_vec = srs_slice.to_vec();
 
-    // read in circuit
-    let mut circuit: GraphCircuit = bincode::deserialize(&compiled_circuit[..])
-        .map_err(|e| Error::new(&format!("Failed to deserialize circuit: {}", e)))?;
+    // call the verify function from util.rs
+    let result = util::verify(proof_vec, vk_vec, settings_vec, srs_vec).unwrap();
 
-    // read in model input
-    let data: GraphWitness = serde_json::from_slice(&witness[..])
-        .map_err(|e| Error::new(format!("Failed to deserialize witness: {}", e)))?;
-
-    // read in proving key
-    let mut reader = std::io::BufReader::new(&pk[..]);
-    let pk = ProvingKey::<G1Affine>::read::<_, GraphCircuit>(
-        &mut reader,
-        halo2_proofs::SerdeFormat::RawBytes,
-        circuit.settings().clone(),
-    )
-        .map_err(|e| Error::new(&format!("Failed to deserialize proving key: {}", e)))?;
-
-    // prep public inputs
-    circuit
-        .load_graph_witness(&data)
-        .map_err(|e| Error::new(&format!("{}", e)))?;
-    let public_inputs = circuit
-        .prepare_public_inputs(&data)
-        .map_err(|e| Error::new(&format!("{}", e)))?;
-    let proof_split_commits: Option<pfsys::ProofSplitCommit> = data.into();
-
-    // read in kzg params
-    let mut reader = std::io::BufReader::new(&srs[..]);
-    let commitment = circuit.settings().run_args.commitment.into();
-    // creates and verifies the proof
-    let proof = match commitment {
-        Commitments::KZG => {
-            let params: ParamsKZG<Bn256> =
-                halo2_proofs::poly::commitment::Params::<'_, G1Affine>::read(&mut reader)
-                    .map_err(|e| Error::new(&format!("Failed to deserialize srs: {}", e)))?;
-
-            create_proof_circuit::<
-                KZGCommitmentScheme<Bn256>,
-                _,
-                ProverSHPLONK<_>,
-                VerifierSHPLONK<_>,
-                KZGSingleStrategy<_>,
-                _,
-                EvmTranscript<_, _, _, _>,
-                EvmTranscript<_, _, _, _>,
-            >(
-                circuit,
-                vec![public_inputs],
-                &params,
-                &pk,
-                CheckMode::UNSAFE,
-                Commitments::KZG,
-                TranscriptType::EVM,
-                proof_split_commits,
-                None,
-            )
-        }
-        Commitments::IPA => {
-            let params: ParamsIPA<_> =
-                halo2_proofs::poly::commitment::Params::<'_, G1Affine>::read(&mut reader)
-                    .map_err(|e| Error::new(&format!("Failed to deserialize srs: {}", e)))?;
-
-            create_proof_circuit::<
-                IPACommitmentScheme<G1Affine>,
-                _,
-                ProverIPA<_>,
-                VerifierIPA<_>,
-                IPASingleStrategy<_>,
-                _,
-                EvmTranscript<_, _, _, _>,
-                EvmTranscript<_, _, _, _>,
-            >(
-                circuit,
-                vec![public_inputs],
-                &params,
-                &pk,
-                CheckMode::UNSAFE,
-                Commitments::IPA,
-                TranscriptType::EVM,
-                proof_split_commits,
-                None,
-            )
-        }
-    }
-        .map_err(|e| Error::new(&format!("{}", e)))?;
-
-    Ok(serde_json::to_string(&proof)
-        .map_err(|e| Error::new(&format!("{}", e)))?
-        .into_bytes())
-}
-
-pub fn verify(
-    proof_js: Vec<u8>,
-    vk: Vec<u8>,
-    settings: Vec<u8>,
-    srs: Vec<u8>,
-) -> Result<bool> {
-    let circuit_settings: GraphSettings = serde_json::from_slice(&settings[..])
-        .map_err(|e| Error::new(&format!("Failed to deserialize settings: {}", e)))?;
-
-    let proof: pfsys::Snark<Fr, G1Affine> = serde_json::from_slice(&proof_js[..])
-        .map_err(|e| Error::new(&format!("Failed to deserialize proof: {}", e)))?;
-
-    let mut reader = std::io::BufReader::new(&vk[..]);
-    let vk = VerifyingKey::<G1Affine>::read::<_, GraphCircuit>(
-        &mut reader,
-        halo2_proofs::SerdeFormat::RawBytes,
-        circuit_settings.clone(),
-    )
-        .map_err(|e| Error::new(&format!("Failed to deserialize vk: {}", e)))?;
-
-    let orig_n = 1 << circuit_settings.run_args.logrows;
-
-    let commitment = circuit_settings.run_args.commitment.into();
-
-    let mut reader = std::io::BufReader::new(&srs[..]);
-    let result = match commitment {
-        Commitments::KZG => {
-            let params: ParamsKZG<Bn256> =
-                halo2_proofs::poly::commitment::Params::<'_, G1Affine>::read(&mut reader)
-                    .map_err(|e| Error::new(&format!("Failed to deserialize params: {}", e)))?;
-            let strategy = KZGSingleStrategy::new(params.verifier_params());
-            match proof.transcript_type {
-                TranscriptType::EVM => verify_proof_circuit::<
-                    VerifierSHPLONK<'_, Bn256>,
-                    KZGCommitmentScheme<Bn256>,
-                    KZGSingleStrategy<_>,
-                    _,
-                    EvmTranscript<G1Affine, _, _, _>,
-                >(&proof, &params, &vk, strategy, orig_n),
-
-                TranscriptType::Poseidon => {
-                    verify_proof_circuit::<
-                        VerifierSHPLONK<'_, Bn256>,
-                        KZGCommitmentScheme<Bn256>,
-                        KZGSingleStrategy<_>,
-                        _,
-                        PoseidonTranscript<NativeLoader, _>,
-                    >(&proof, &params, &vk, strategy, orig_n)
-                }
-            }
-        }
-        Commitments::IPA => {
-            let params: ParamsIPA<_> =
-                halo2_proofs::poly::commitment::Params::<'_, G1Affine>::read(&mut reader)
-                    .map_err(|e| Error::new(&format!("Failed to deserialize params: {}", e)))?;
-            let strategy = IPASingleStrategy::new(params.verifier_params());
-            match proof.transcript_type {
-                TranscriptType::EVM => verify_proof_circuit::<
-                    VerifierIPA<_>,
-                    IPACommitmentScheme<G1Affine>,
-                    IPASingleStrategy<_>,
-                    _,
-                    EvmTranscript<G1Affine, _, _, _>,
-                >(&proof, &params, &vk, strategy, orig_n),
-                TranscriptType::Poseidon => {
-                    verify_proof_circuit::<
-                        VerifierIPA<_>,
-                        IPACommitmentScheme<G1Affine>,
-                        IPASingleStrategy<_>,
-                        _,
-                        PoseidonTranscript<NativeLoader, _>,
-                    >(&proof, &params, &vk, strategy, orig_n)
-                }
-            }
-        }
-    };
-
-    match result {
-        Ok(_) => Ok(true),
-        Error::new(e) => Err(Error::new(format!("{}", e))),
-    }
+    result as u8
 }
