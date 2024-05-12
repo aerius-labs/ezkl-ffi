@@ -28,7 +28,7 @@ pub(crate) fn prove(
     pk: Vec<u8>,
     compiled_circuit: Vec<u8>,
     srs: Vec<u8>,
-) -> Result<Vec<u8>> {
+) -> Result<String> {
 
     // read in circuit
     let mut circuit: GraphCircuit = bincode::deserialize(&compiled_circuit[..])
@@ -118,7 +118,7 @@ pub(crate) fn prove(
 
     Ok(serde_json::to_string(&proof)
         .map_err(|e| Error::msg(format!("{}", e)))?
-        .into_bytes())
+    )
 }
 
 pub(crate) fn verify(

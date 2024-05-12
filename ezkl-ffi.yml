@@ -40,6 +40,7 @@ TRANSLATOR:
   Rules:
     function:
       - {action: accept, from: "verify_proof"}
+      - {action: accept, from: "prove"}
     private:
       - {transform: unexport}
     post-global:
