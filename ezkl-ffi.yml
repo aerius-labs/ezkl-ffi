@@ -41,6 +41,8 @@ TRANSLATOR:
     function:
       - {action: accept, from: "verify_proof"}
       - {action: accept, from: "prove"}
+      - {action: accept, from: "gen_vk"}
+      - {action: accept, from: "gen_pk"}
     private:
       - {transform: unexport}
     post-global:
