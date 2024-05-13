@@ -5,6 +5,8 @@ mod util;
 use std::{
     ffi::CString
 };
+use std::fs::File;
+use std::io::Write;
 
 #[no_mangle]
 pub extern "C" fn verify_proof(
@@ -66,4 +68,51 @@ pub extern "C" fn prove(
     let result = util::prove(witness_vec, pk_vec, compiled_circuit_vec, srs_vec).unwrap();
 
     CString::new(result).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn gen_vk(
+    compiled_circuit_length: libc::size_t,
+    compiled_circuit: *const u8,
+    params_serialized_length: libc::size_t,
+    params_serialized: *const u8,
+    compress_selectors: bool,
+) {
+    let compiled_circuit_slice = unsafe { std::slice::from_raw_parts(compiled_circuit as *const u8, compiled_circuit_length) };
+    let compiled_circuit_vec = compiled_circuit_slice.to_vec();
+
+    let params_serialized_slice = unsafe { std::slice::from_raw_parts(params_serialized as *const u8, params_serialized_length) };
+    let params_serialized_vec = params_serialized_slice.to_vec();
+
+    println!("generating vk");
+    // call the gen_vk function from util.rs
+    let result = util::gen_vk(compiled_circuit_vec, params_serialized_vec, compress_selectors).unwrap();
+    // output result vector to file, using rust fs
+    let mut file = File::create("./vk.key").unwrap();
+    file.write_all(&result).unwrap();
+}
+#[no_mangle]
+pub extern "C" fn gen_pk(
+    vk_length: libc::size_t,
+    vk: *const u8,
+    circuit_length: libc::size_t,
+    circuit: *const u8,
+    params_serialized_length: libc::size_t,
+    params_serialized: *const u8,
+) {
+    let vk_slice = unsafe { std::slice::from_raw_parts(vk as *const u8, vk_length) };
+    let vk_vec = vk_slice.to_vec();
+
+    let circuit_slice = unsafe { std::slice::from_raw_parts(circuit as *const u8, circuit_length) };
+    let circuit_vec = circuit_slice.to_vec();
+
+    let params_serialized_slice = unsafe { std::slice::from_raw_parts(params_serialized as *const u8, params_serialized_length) };
+    let params_serialized_vec = params_serialized_slice.to_vec();
+
+    println!("generating pk");
+    // call the gen_pk function from util.rs
+    let result = util::gen_pk(vk_vec, circuit_vec, params_serialized_vec).unwrap();
+    // output result vector to file, using rust fs
+    let mut file = File::create("./pk.key").unwrap();
+    file.write_all(&result).unwrap();
 }
